@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime case data — never committed (evidence lockers, journals, store)
+data/
+*.db
+*.db-wal
+*.db-shm
+backend/app/store/*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+/tmp/opencode/

@@ -1,0 +1,75 @@
+# GHOST THREAD — local single-command reproduction.
+# Split images: `api` serves analysts, `worker` runs browser-heavy captures.
+# Ref: gpt-researcher.md Category 9 / Finding 9.1.
+
+name: ghost-thread
+
+x-case-data: &case-data
+  GHOST_CASE_DATA_DIR: /data/cases
+  GHOST_JOURNAL_DIR: /data/journals
+  GHOST_CAPTURE_DIR: /data/captures
+  GHOST_SQLITE_PATH: /data/ghost_thread.db
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: ghost-thread/api:0.1.0
+    container_name: ghost-thread-api
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *case-data
+      GHOST_ENV: ${GHOST_ENV:-local}
+      GHOST_LOG_LEVEL: ${GHOST_LOG_LEVEL:-INFO}
+      GHOST_API_HOST: 0.0.0.0
+      GHOST_API_PORT: 8000
+    ports:
+      - "${GHOST_API_PORT:-8000}:8000"
+    volumes:
+      - case-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        # Single source of truth for the deterministic capture toolchain.
+        PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:-1.47.0}
+    image: ghost-thread/worker:0.1.0
+    container_name: ghost-thread-worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *case-data
+      GHOST_ENV: ${GHOST_ENV:-local}
+      GHOST_LOG_LEVEL: ${GHOST_LOG_LEVEL:-INFO}
+      PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:-1.47.0}
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      GHOST_BROWSER_HEADLESS: ${GHOST_BROWSER_HEADLESS:-true}
+      GHOST_WORKER_CONCURRENCY: ${GHOST_WORKER_CONCURRENCY:-2}
+      GHOST_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - case-data:/data
+    # Chromium needs more shared memory than the 64MB default or screenshots
+    # of large archival pages crash the renderer.
+    shm_size: "1gb"
+    init: true
+    restart: unless-stopped
+
+volumes:
+  case-data:
+    driver: local

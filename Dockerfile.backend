@@ -1,0 +1,47 @@
+# GHOST THREAD — serving image (analyst-facing API).
+# Deliberately browser-free: no Chromium, no Playwright bundle. Heavy archival
+# crawling lives in Dockerfile.worker so the API stays responsive during sweeps.
+# Ref: gpt-researcher.md Category 9 / Finding 9.1 (split-image approach).
+
+FROM python:3.11-slim-bookworm AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dependency layer: copy only metadata + package marker so edits to app code
+# do not invalidate the installed-dependency cache.
+COPY pyproject.toml README.md ./
+COPY backend/__init__.py ./backend/__init__.py
+COPY backend/app/__init__.py ./backend/app/__init__.py
+RUN pip install --upgrade pip && pip install .
+
+# Application layer
+COPY backend ./backend
+
+# Non-root runtime; case data is a mounted volume owned by this user.
+RUN useradd --create-home --uid 10001 ghost \
+    && mkdir -p /data/cases /data/journals /data/captures \
+    && chown -R ghost:ghost /app /data
+USER ghost
+
+ENV GHOST_API_HOST=0.0.0.0 \
+    GHOST_API_PORT=8000 \
+    GHOST_CASE_DATA_DIR=/data/cases \
+    GHOST_JOURNAL_DIR=/data/journals \
+    GHOST_CAPTURE_DIR=/data/captures \
+    GHOST_SQLITE_PATH=/data/ghost_thread.db
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ghost-thread"
+version = "0.1.0"
+description = "GHOST THREAD — agentic OSINT gap-detection system (absence-first investigation engine)"
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+license = { text = "Proprietary" }
+authors = [{ name = "GHOST THREAD" }]
+keywords = ["osint", "agents", "investigation", "absence-detection"]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Framework :: FastAPI",
+  "Private :: Do Not Upload",
+]
+
+# Serving-tier runtime only. Browser/collection-heavy extras live in the
+# `worker` optional group so the API image stays small and responsive
+# (see Dockerfile.backend vs Dockerfile.worker).
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "pydantic>=2.7,<3.0",
+  "pydantic-settings>=2.3,<3.0",
+  "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+# Browser-heavy ghost-hunter worker tier. Playwright is pinned exactly so
+# captures (screenshots/HAR/PDF) stay byte-deterministic across rebuilds and
+# match the pinned browser bundle in Dockerfile.worker.
+worker = [
+  "playwright==1.47.0",
+]
+dev = [
+  "pytest>=8.0,<9.0",
+  "pytest-asyncio>=0.23,<1.0",
+  "httpx>=0.27,<1.0",
+  "ruff>=0.6,<1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/vedant585458/GHOST_THREAD"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["frontend", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"

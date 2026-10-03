@@ -1,0 +1,44 @@
+# GHOST THREAD — browser-heavy ghost-hunter worker image.
+# The base image pins BOTH the Playwright library and the bundled browser
+# builds to one release, so archival captures (screenshots / HAR / PDF) are
+# byte-deterministic and reproducible for evidentiary purposes.
+# Ref: gpt-researcher.md Category 9 / Finding 9.1 ("pin browser versions
+# explicitly to keep captures deterministic").
+#
+# Pin contract: PLAYWRIGHT_VERSION must equal the image tag below AND the
+# `playwright==` pin in pyproject.toml's [project.optional-dependencies].worker.
+
+ARG PLAYWRIGHT_VERSION=1.47.0
+FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
+
+ARG PLAYWRIGHT_VERSION
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PLAYWRIGHT_VERSION=${PLAYWRIGHT_VERSION} \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY backend/__init__.py ./backend/__init__.py
+COPY backend/app/__init__.py ./backend/app/__init__.py
+RUN pip install --upgrade pip && pip install ".[worker]"
+
+# Fail the build if the installed library drifts from the pinned browser bundle.
+RUN python -c "import playwright, os, sys; v=playwright.__version__; p=os.environ['PLAYWRIGHT_VERSION']; sys.exit(0) if v==p else sys.exit('playwright pin drift: installed %s != pinned %s' % (v, p))"
+
+COPY backend ./backend
+
+RUN mkdir -p /data/cases /data/journals /data/captures
+
+ENV GHOST_CASE_DATA_DIR=/data/cases \
+    GHOST_JOURNAL_DIR=/data/journals \
+    GHOST_CAPTURE_DIR=/data/captures \
+    GHOST_SQLITE_PATH=/data/ghost_thread.db \
+    GHOST_BROWSER_HEADLESS=true
+
+# Task 1 ships no agent logic: the worker reports its pinned toolchain and
+# idles. Task 38/64 replace this with the queue consumer entrypoint.
+CMD ["python", "-c", "import time, playwright; print('ghost-thread worker idle | playwright', playwright.__version__, flush=True); [time.sleep(3600) for _ in iter(int, 1)]"]
